@@ -419,101 +419,70 @@ document.addEventListener('DOMContentLoaded', () => {
                             const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
                             window.open(waUrl, '_blank');
                         };
-
-                        resultsList.appendChild(li);
-                    });
-                }
-                function generateLink(giver, receiver, value, date) {
-                    const payload = {
-                        g: giver,
-                        r: receiver,
-                        v: value,
-                        d: date,
-                        s: Math.random().toString(36).substring(7) // Salt
-                    };
-                    const encoded = encodeData(payload);
-
-                    // Hardcoded base URL as requested
-                    const baseUrl = "https://simczak.github.io/amigo-secreto/";
-
-                    try {
-                        const url = new URL(baseUrl);
-                        url.searchParams.set('data', encoded);
-                        return url.toString();
-                    } catch (e) {
-                        console.error("Invalid Hardcoded URL", e);
-                        return baseUrl + "?data=" + encoded;
                     }
-                }
-
-                // Simple Base64 encoding with a tiny bit of obfuscation
-                function encodeData(obj) {
-                    const str = JSON.stringify(obj);
-                    return btoa(encodeURIComponent(str));
-                }
 
                 function decodeData(str) {
-                    const decodedStr = decodeURIComponent(atob(str));
-                    return JSON.parse(decodedStr);
-                }
+                            const decodedStr = decodeURIComponent(atob(str));
+                            return JSON.parse(decodedStr);
+                        }
 
                 function resetApp() {
-                    participants = [];
-                    renderParticipants();
-                    participantInput.value = '';
-                    maxValueInput.value = '';
-                    revealDateInput.value = '';
+                            participants = [];
+                            renderParticipants();
+                            participantInput.value = '';
+                            maxValueInput.value = '';
+                            revealDateInput.value = '';
 
-                    adminView.classList.remove('active');
-                    adminView.classList.add('hidden');
-                    setupView.classList.add('active');
-                    setupView.classList.remove('hidden');
+                            adminView.classList.remove('active');
+                            adminView.classList.add('hidden');
+                            setupView.classList.add('active');
+                            setupView.classList.remove('hidden');
 
-                    // Clear URL params
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete('data');
-                    window.history.replaceState({}, '', url);
-                }
+                            // Clear URL params
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('data');
+                            window.history.replaceState({}, '', url);
+                        }
 
                 function showToast(msg, type = 'success') {
-                    toast.textContent = msg;
-                    toast.style.background = type === 'error' ? '#f43f5e' : '#10b981';
-                    toast.classList.add('show');
-                    setTimeout(() => {
-                        toast.classList.remove('show');
-                    }, 3000);
-                }
+                            toast.textContent = msg;
+                            toast.style.background = type === 'error' ? '#f43f5e' : '#10b981';
+                            toast.classList.add('show');
+                            setTimeout(() => {
+                                toast.classList.remove('show');
+                            }, 3000);
+                        }
 
                 function confettiEffect() {
-                    // Simple confetti using canvas or DOM? 
-                    // Let's use a simple CSS/DOM approach for lightweight effect
-                    const colors = ['#8b5cf6', '#f43f5e', '#3b82f6', '#10b981', '#fbbf24'];
+                            // Simple confetti using canvas or DOM? 
+                            // Let's use a simple CSS/DOM approach for lightweight effect
+                            const colors = ['#8b5cf6', '#f43f5e', '#3b82f6', '#10b981', '#fbbf24'];
 
-                    for (let i = 0; i < 50; i++) {
-                        const confetti = document.createElement('div');
-                        confetti.style.position = 'fixed';
-                        confetti.style.left = Math.random() * 100 + 'vw';
-                        confetti.style.top = '-10px';
-                        confetti.style.width = '10px';
-                        confetti.style.height = '10px';
-                        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-                        confetti.style.zIndex = '1000';
-                        confetti.style.animation = `fall ${Math.random() * 3 + 2}s linear forwards`;
-                        document.body.appendChild(confetti);
+                            for (let i = 0; i < 50; i++) {
+                                const confetti = document.createElement('div');
+                                confetti.style.position = 'fixed';
+                                confetti.style.left = Math.random() * 100 + 'vw';
+                                confetti.style.top = '-10px';
+                                confetti.style.width = '10px';
+                                confetti.style.height = '10px';
+                                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                                confetti.style.zIndex = '1000';
+                                confetti.style.animation = `fall ${Math.random() * 3 + 2}s linear forwards`;
+                                document.body.appendChild(confetti);
 
-                        setTimeout(() => confetti.remove(), 5000);
-                    }
+                                setTimeout(() => confetti.remove(), 5000);
+                            }
 
-                    // Add keyframes dynamically if not present
-                    if (!document.getElementById('confetti-style')) {
-                        const style = document.createElement('style');
-                        style.id = 'confetti-style';
-                        style.innerHTML = `
+                            // Add keyframes dynamically if not present
+                            if (!document.getElementById('confetti-style')) {
+                                const style = document.createElement('style');
+                                style.id = 'confetti-style';
+                                style.innerHTML = `
                 @keyframes fall {
                     to { transform: translateY(100vh) rotate(720deg); }
                 }
             `;
-                        document.head.appendChild(style);
-                    }
-                }
+                                document.head.appendChild(style);
+                            }
+                        }
             });
