@@ -34,42 +34,101 @@
                         <input type="text" id="participant-name" placeholder="Nome da pessoa" autocomplete="off">
                         <button id="add-btn" class="btn-icon"><i class="fas fa-plus"></i></button>
                     </div>
-
-                    <!-- Admin View (Results) -->
-                    <section id="admin-view" class="card hidden">
-                        <header class="card-header">
-                            <h1>Sorteio Realizado!</h1>
-                            <p>Envie os links individuais para cada participante.</p>
-                        </header>
-
-                        <div class="card-body">
-                            <ul id="results-list" class="results-list">
-                                <!-- Result items will be injected here -->
-                            </ul>
-                        </div>
-
-                        <footer class="card-footer">
-                            <button id="reset-btn" class="btn-secondary">Novo Sorteio</button>
-                            </header>
-
-                            <div class="reveal-result">
-                                <div class="avatar-placeholder">
-                                    <i class="fas fa-user-secret"></i>
-                                </div>
-                                <h1 id="receiver-name" class="reveal-name">???</h1>
-                            </div>
-
-                            <div class="event-details">
-                                <div class="detail-item">
-                                    <i class="fas fa-calendar-alt"></i>
-                                    <span id="display-date">--/--/----</span>
-                                </div>
-                                <div class="detail-item">
-                                    <i class="fas fa-tag"></i>
-                                    <span id="display-value">R$ --,--</span>
-                                </div>
-                            </div>
                 </div>
+
+                <ul id="participants-list" class="participants-list">
+                    <!-- List items will be injected here -->
+                </ul>
+
+                <div class="divider"></div>
+
+                <div class="settings-grid">
+                    <div class="input-group">
+                        <label for="max-value">Valor Máximo (R$)</label>
+                        <input type="number" id="max-value" placeholder="Ex: 50,00">
+                    </div>
+                    <div class="input-group">
+                        <label for="reveal-date">Data da Revelação</label>
+                        <input type="date" id="reveal-date">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="base-url">Link do Site (Opcional)</label>
+                    <input type="url" id="base-url" placeholder="Ex: https://seu-usuario.github.io/amigo-secreto">
+                    <small style="color: var(--text-muted); font-size: 0.8rem;">Preencha se for hospedar o site, para
+                        gerar links corretos.</small>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="circle-mode">
+                    <label for="circle-mode">
+                        <span class="checkbox-custom"></span>
+                        <div>
+                            <strong>Círculo Completo</strong>
+                            <small>Garante um único ciclo de presentes (A->B->C->A)</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <footer class="card-footer">
+                <button id="draw-btn" class="btn-primary" disabled>Realizar Sorteio</button>
+            </footer>
+        </section>
+
+        <!-- Admin View (Results) -->
+        <section id="admin-view" class="card hidden">
+            <header class="card-header">
+                <h1>Sorteio Realizado!</h1>
+                <p>Envie os links individuais para cada participante.</p>
+            </header>
+
+            <div class="card-body">
+                <ul id="results-list" class="results-list">
+                    <!-- Result items will be injected here -->
+                </ul>
+            </div>
+
+            <footer class="card-footer">
+                <button id="reset-btn" class="btn-secondary">Novo Sorteio</button>
+            </footer>
+        </section>
+
+        <!-- Reveal View -->
+        <section id="reveal-view" class="card hidden">
+            <div class="gift-box-container" id="gift-box-trigger">
+                <div class="gift-box">
+                    <div class="lid"></div>
+                    <div class="box"></div>
+                </div>
+                <p class="click-hint">Toque para abrir</p>
+            </div>
+
+            <div id="reveal-content" class="reveal-content hidden">
+                <header class="card-header">
+                    <h2>Olá, <span id="giver-name" class="highlight-text"></span>!</h2>
+                    <p>Seu amigo secreto é...</p>
+                </header>
+
+                <div class="reveal-result">
+                    <div class="avatar-placeholder">
+                        <i class="fas fa-user-secret"></i>
+                    </div>
+                    <h1 id="receiver-name" class="reveal-name">???</h1>
+                </div>
+
+                <div class="event-details">
+                    <div class="detail-item">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span id="display-date">--/--/----</span>
+                    </div>
+                    <div class="detail-item">
+                        <i class="fas fa-tag"></i>
+                        <span id="display-value">R$ --,--</span>
+                    </div>
+                </div>
+            </div>
         </section>
     </main>
 
