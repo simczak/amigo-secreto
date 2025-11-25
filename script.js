@@ -248,72 +248,20 @@ document.addEventListener('DOMContentLoaded', () => {
             resultsList.appendChild(li);
         });
     }
+    revealDateInput.value = '';
 
-    function generateLink(giver, receiver, value, date) {
-        const payload = {
-            g: giver,
-            r: receiver,
-            v: value,
-            d: date,
-            s: Math.random().toString(36).substring(7) // Salt
-        };
-        const encoded = encodeData(payload);
+    adminView.classList.remove('active');
+    adminView.classList.add('hidden');
+    setupView.classList.add('active');
+    setupView.classList.remove('hidden');
 
-        const baseUrlInput = document.getElementById('base-url');
-        let baseUrl = window.location.href.split('?')[0]; // Default to current URL without params
+    // Clear URL params
+    const url = new URL(window.location.href);
+    url.searchParams.delete('data');
+    window.history.replaceState({}, '', url);
+}
 
-        if (baseUrlInput && baseUrlInput.value.trim()) {
-            baseUrl = baseUrlInput.value.trim();
-            // Ensure no trailing slash if we are going to append query params directly? 
-            // Actually URL object handles it better, but let's be safe.
-            // If user puts "google.com", we might need https. 
-            // Let's rely on them pasting a full URL for now or simple heuristic.
-        }
-
-        try {
-            const url = new URL(baseUrl);
-            url.searchParams.set('data', encoded);
-            return url.toString();
-        } catch (e) {
-            // Fallback if invalid URL provided
-            console.warn("Invalid Base URL, using current location");
-            const url = new URL(window.location.href);
-            url.searchParams.set('data', encoded);
-            return url.toString();
-        }
-    }
-
-    // Simple Base64 encoding with a tiny bit of obfuscation
-    // Not secure against determined hackers, but prevents casual reading
-    function encodeData(obj) {
-        const str = JSON.stringify(obj);
-        return btoa(encodeURIComponent(str));
-    }
-
-    function decodeData(str) {
-        const decodedStr = decodeURIComponent(atob(str));
-        return JSON.parse(decodedStr);
-    }
-
-    function resetApp() {
-        participants = [];
-        renderParticipants();
-        participantInput.value = '';
-        maxValueInput.value = '';
-        revealDateInput.value = '';
-
-        adminView.classList.remove('active');
-        adminView.classList.add('hidden');
-        setupView.classList.add('active');
-        setupView.classList.remove('hidden');
-
-        // Clear URL params
-        const url = new URL(window.location.href);
-        url.searchParams.delete('data');
-        window.history.replaceState({}, '', url);
-    }
-
-    function showToast(msg, type = 'success') {
+        function showToast(msg, type = 'success') {
         toast.textContent = msg;
         toast.style.background = type === 'error' ? '#f43f5e' : '#10b981';
         toast.classList.add('show');
@@ -322,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
 
-    function confettiEffect() {
+        function confettiEffect() {
         // Simple confetti using canvas or DOM? 
         // Let's use a simple CSS/DOM approach for lightweight effect
         const colors = ['#8b5cf6', '#f43f5e', '#3b82f6', '#10b981', '#fbbf24'];
@@ -354,4 +302,4 @@ document.addEventListener('DOMContentLoaded', () => {
             document.head.appendChild(style);
         }
     }
-});
+    });
