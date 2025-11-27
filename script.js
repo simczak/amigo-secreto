@@ -508,7 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.className = 'result-item';
 
             li.innerHTML = `
-                <div class="result-info">
+                <div class="result-info" data-giver="${pair.giver}">
                     <strong><span style="color: var(--text-muted); margin-right: 5px;">${index + 1}.</span> ${pair.giver}</strong>
                     <small style="margin-top: 4px;">Pegou: ???</small>
                 </div>
@@ -636,8 +636,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const revealDate = revealDateInput.value;
         const baseUrl = window.location.href.split('?')[0]; // Clean URL
 
-        items.forEach((item, index) => {
-            const pair = currentPairs[index];
+        items.forEach((item) => {
+            const giverName = item.querySelector('.result-info').dataset.giver;
+            const pair = currentPairs.find(p => p.giver === giverName);
+
+            if (!pair) return;
+
             let link = '';
 
             if (currentSlug && pair.secretId) {
