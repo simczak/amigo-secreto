@@ -1,7 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Supabase Initialization ---
+    let supabase = null;
+    if (typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && CONFIG.SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+        try {
+            console.log("Initializing Supabase with URL:", CONFIG.SUPABASE_URL);
+            supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+            console.log("Supabase initialized successfully");
+        } catch (e) {
+            console.error("Failed to initialize Supabase", e);
+        }
+    } else {
+        console.warn("Supabase configuration missing or invalid. Using local storage only.");
+        console.log("CONFIG state:", typeof CONFIG !== 'undefined' ? CONFIG : "undefined");
+    }
+
     // State
     let participants = [];
     let currentPairs = [];
+    let currentSlug = null; // Store the current draw's slug
 
     // DOM Elements
     const setupView = document.getElementById('setup-view');
@@ -33,6 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toast = document.getElementById('toast');
 
+    // New Elements for URL Display
+    const urlDisplay = document.getElementById('url-display');
+    const generatedUrlSpan = document.getElementById('generated-url');
+    const copyUrlBtn = document.getElementById('copy-url-btn');
+
     // --- Initialization ---
     checkUrlForReveal();
 
@@ -53,23 +74,232 @@ document.addEventListener('DOMContentLoaded', () => {
         confettiEffect();
     });
 
+    if (copyUrlBtn) {
+        copyUrlBtn.addEventListener('click', () => {
+            const url = generatedUrlSpan.textContent;
+            if (url && url !== '...') {
+                navigator.clipboard.writeText(url).then(() => showToast("Link copiado!"));
+            }
+        });
+    }
+
     // --- Core Functions ---
 
-    function checkUrlForReveal() {
+    async function checkUrlForReveal() {
         const urlParams = new URLSearchParams(window.location.search);
-        const data = urlParams.get('data');
+        const dataParam = urlParams.get('data');
+        const idParam = urlParams.get('id'); // Friendly Slug
+        const userParam = urlParams.get('u'); // User for individual link (Secret ID or Slug)
+        const adminParam = urlParams.get('admin'); // Admin Token
 
-        if (data) {
+        // Case 1: Legacy URL (base64 data)
+        if (dataParam) {
             try {
-                const decoded = decodeData(data);
-                showRevealView(decoded);
+                const decoded = decodeData(dataParam);
+                if (decoded.master) {
+                    restoreAdminView(decoded);
+                } else {
+                    showRevealView(decoded);
+                }
+                return;
             } catch (e) {
-                console.error("Invalid data", e);
-                // Fallback to setup if data is corrupted
+                console.error("Invalid legacy data", e);
+            }
+        }
+
+        // Case 2: Friendly URL (Supabase Slug)
+        if (idParam) {
+            if (!supabase) {
+                showToast("Erro: Banco de dados não conectado para carregar este sorteio.", "error");
+                showSetupView();
+                return;
+            }
+
+            try {
+                // Fetch draw data from Supabase
+                const { data, error } = await supabase
+                    .from('draws')
+                    .select('draw_data')
+                    .eq('slug', idParam)
+                    .single();
+
+                if (error || !data) {
+                    console.error("Draw not found or error:", error);
+                    showToast("Sorteio não encontrado.", "error");
+                    showSetupView();
+                    return;
+                }
+
+                const drawData = data.draw_data;
+                currentSlug = idParam; // Store for context
+
+                if (userParam) {
+                    // Individual Link: Find the pair for this user
+                    // Try to find by Secret ID first (Secure)
+                    let pair = drawData.pairs.find(p => p.secretId === userParam);
+
+                    // Fallback: Try to find by Name Slug (Legacy/Insecure - for old draws only)
+                    if (!pair) {
+                        pair = drawData.pairs.find(p => generateSlug(p.giver) === userParam);
+                    }
+
+                    if (pair) {
+                        const revealData = {
+                            g: pair.giver,
+                            r: pair.receiver,
+                            v: drawData.maxValue,
+                            d: drawData.revealDate
+                        };
+                        showRevealView(revealData);
+                    } else {
+                        showToast("Participante não encontrado neste sorteio.", "error");
+                        showSetupView();
+                    }
+                } else {
+                    // Master Link: Check for Admin Token
+                    // If draw has an adminToken, REQUIRE it to match
+                    if (drawData.adminToken) {
+                        if (adminParam === drawData.adminToken) {
+                            restoreAdminView(drawData);
+                        } else {
+                            showToast("Acesso Negado: Link de administrador inválido.", "error");
+                            showSetupView();
+                        }
+                    } else {
+                        // Legacy draws without adminToken: Allow access (or block if you prefer strict security)
+                        // For now, allowing backward compatibility
+                        restoreAdminView(drawData);
+                    }
+                }
+
+            } catch (e) {
+                console.error("Exception loading draw:", e);
                 showSetupView();
             }
         } else {
             showSetupView();
+        }
+    }
+
+    // ... (rest of functions) ...
+
+    async function generateMasterLink() {
+        if (!urlDisplay) return;
+
+        const adminToken = generateSecretId(); // Reuse random string generator for admin token
+
+        const masterData = {
+            master: true,
+            pairs: currentPairs,
+            maxValue: maxValueInput.value,
+            revealDate: revealDateInput.value,
+            adminToken: adminToken // Save token in data
+        };
+
+        // Default to legacy encoding if Supabase is down
+        let fullUrl = '';
+        let slug = null;
+
+        if (supabase && participants.length > 0) {
+            // Generate Friendly Slug based on first participant
+            const firstName = participants[0];
+            slug = await getUniqueSlug(firstName);
+        }
+
+        if (slug) {
+            // Use Friendly URL with Admin Token
+            currentSlug = slug;
+            const baseUrl = window.location.href.split('?')[0];
+            fullUrl = `${baseUrl}?id=${slug}&admin=${adminToken}`;
+
+            // Save full data to Supabase
+            await saveToHistory(fullUrl, currentPairs.length, slug, masterData);
+        } else {
+            // Fallback to Legacy URL
+            const encoded = encodeData(masterData);
+            const baseUrl = window.location.href.split('?')[0];
+            fullUrl = `${baseUrl}?data=${encoded}`;
+            await saveToHistory(fullUrl, currentPairs.length, null, null);
+        }
+
+        // Show loading state or full URL first
+        generatedUrlSpan.textContent = fullUrl;
+        urlDisplay.classList.remove('hidden');
+
+        // Automatically update the browser URL so it's saved in history
+        window.history.pushState({ path: fullUrl }, '', fullUrl);
+
+        // Update individual links now that we have the slug (or not)
+        updateIndividualLinks();
+
+        // Try to shorten the URL (optional)
+        try {
+            const shortUrl = await shortenUrl(fullUrl);
+            if (shortUrl) {
+                generatedUrlSpan.textContent = shortUrl;
+            }
+        } catch (error) {
+            console.error("Failed to shorten URL:", error);
+        }
+    }
+
+    async function saveToHistory(url, count, slug = null, drawData = null) {
+        console.log("Attempting to save draw to history...", { url, count, slug });
+        const timestamp = new Date().toISOString();
+
+        // 1. Save to LocalStorage (Always do this as backup)
+        try {
+            const history = JSON.parse(localStorage.getItem('amigoSecretoHistory') || '[]');
+            const newItem = {
+                id: Date.now(),
+                date: timestamp,
+                participants: count,
+                url: url,
+                slug: slug // Store slug locally too if available
+            };
+            history.unshift(newItem); // Add to beginning
+            localStorage.setItem('amigoSecretoHistory', JSON.stringify(history));
+            console.log("Saved to LocalStorage");
+        } catch (e) {
+            console.error("Failed to save local history", e);
+        }
+
+        // 2. Try Supabase
+        if (supabase) {
+            try {
+                console.log("Saving to Supabase 'draws' table...");
+
+                const payload = {
+                    url: url,
+                    participants_count: count,
+                    created_at: timestamp
+                };
+
+                if (slug && drawData) {
+                    payload.slug = slug;
+                    payload.draw_data = drawData;
+                }
+
+                const { data, error } = await supabase
+                    .from('draws')
+                    .insert([payload]);
+
+                if (error) {
+                    console.error("Supabase save ERROR:", error);
+                    let msg = "Erro ao salvar no histórico online.";
+                    if (error.code === 'PGRST204' && error.message.includes('Could not find the')) {
+                        msg += " Coluna faltando no Supabase (slug ou draw_data).";
+                    }
+                    // Don't show toast for duplicate key error (slug collision handled elsewhere, but just in case)
+                    if (error.code !== '23505') {
+                        showToast(msg, "error");
+                    }
+                } else {
+                    console.log("Supabase save SUCCESS:", data);
+                }
+            } catch (e) {
+                console.error("Supabase save EXCEPTION:", e);
+            }
         }
     }
 
@@ -82,12 +312,53 @@ document.addEventListener('DOMContentLoaded', () => {
         revealView.classList.add('hidden');
     }
 
+    function restoreAdminView(data) {
+        setupView.classList.remove('active');
+        setupView.classList.add('hidden');
+        revealView.classList.remove('active');
+        revealView.classList.add('hidden');
+
+        adminView.classList.add('active');
+        adminView.classList.remove('hidden');
+
+        // Restore state
+        currentPairs = data.pairs;
+        maxValueInput.value = data.maxValue || '';
+        revealDateInput.value = data.revealDate || '';
+
+        // Render results
+        renderResults();
+        updateIndividualLinks();
+
+        // Show master link again
+        if (urlDisplay) {
+            urlDisplay.classList.remove('hidden');
+            // If we have a slug, show the friendly URL, otherwise show current URL
+            if (currentSlug) {
+                const baseUrl = window.location.href.split('?')[0];
+                generatedUrlSpan.textContent = `${baseUrl}?id=${currentSlug}`;
+                // Add admin token if available in data
+                if (data.adminToken) {
+                    generatedUrlSpan.textContent += `&admin=${data.adminToken}`;
+                }
+            } else {
+                generatedUrlSpan.textContent = window.location.href;
+            }
+        }
+    }
+
     function showRevealView(data) {
         setupView.classList.remove('active');
         setupView.classList.add('hidden');
+        adminView.classList.remove('active');
+        adminView.classList.add('hidden');
 
         revealView.classList.add('active');
         revealView.classList.remove('hidden');
+
+        // Ensure content is hidden initially
+        revealContent.classList.add('hidden');
+        giftBoxTrigger.style.display = 'flex'; // Restore gift box
 
         giverNameDisplay.textContent = data.g; // giver
         receiverNameDisplay.textContent = data.r; // receiver
@@ -105,7 +376,6 @@ document.addEventListener('DOMContentLoaded', () => {
             displayValue.textContent = "Valor livre";
         }
     }
-
     function addParticipant() {
         const name = participantInput.value.trim();
         if (!name) return;
@@ -130,18 +400,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderParticipants() {
         participantsList.innerHTML = '';
-        participants.forEach(name => {
+        participants.forEach((name, index) => {
             const li = document.createElement('li');
             li.className = 'participant-item';
             li.innerHTML = `
-                <span>${name}</span>
-                <button class="remove-btn" onclick="removeParticipant('${name}')">
+                <span><span style="color: var(--text-muted); margin-right: 5px;">${index + 1}.</span> <strong>${name}</strong></span>
+                <button class="remove-btn">
                     <i class="fas fa-times"></i>
                 </button>
             `;
-            // Bind click event for remove button dynamically or use global delegation. 
-            // For simplicity in this scope, we'll use the onclick attribute hack or better:
-            li.querySelector('.remove-btn').onclick = () => removeParticipant(name);
+            li.querySelector('.remove-btn').addEventListener('click', () => removeParticipant(name));
             participantsList.appendChild(li);
         });
     }
@@ -155,38 +423,271 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
     function performDraw() {
         if (participants.length < 3) return;
 
-        const isCircleMode = circleModeCheckbox.checked;
-        let pairs = [];
+        // Shuffle and pair
+        let shuffled = [...participants];
 
-        if (isCircleMode) {
-            pairs = drawCircleMode([...participants]);
+        if (circleModeCheckbox.checked) {
+            // Circle Mode: A -> B -> C -> A
+            shuffleArray(shuffled);
+            currentPairs = [];
+            for (let i = 0; i < shuffled.length; i++) {
+                let giver = shuffled[i];
+                let receiver = shuffled[(i + 1) % shuffled.length];
+                // Add Secret ID for secure linking
+                currentPairs.push({
+                    giver,
+                    receiver,
+                    secretId: generateSecretId()
+                });
+            }
         } else {
-            pairs = drawStandardMode([...participants]);
+            // Random Mode (Standard)
+            let receiverPool = [...participants];
+            currentPairs = [];
+
+            let isValid = false;
+            let attempts = 0;
+
+            while (!isValid && attempts < 100) {
+                attempts++;
+                shuffleArray(receiverPool);
+                isValid = true;
+                for (let i = 0; i < participants.length; i++) {
+                    if (participants[i] === receiverPool[i]) {
+                        isValid = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!isValid) {
+                showToast("Não foi possível gerar um sorteio válido. Tente novamente.", "error");
+                return;
+            }
+
+            for (let i = 0; i < participants.length; i++) {
+                currentPairs.push({
+                    giver: participants[i],
+                    receiver: receiverPool[i],
+                    secretId: generateSecretId()
+                });
+            }
         }
 
-        currentPairs = pairs; // Save for verification
-        renderResults(pairs);
-
+        renderResults();
         setupView.classList.remove('active');
         setupView.classList.add('hidden');
         adminView.classList.add('active');
         adminView.classList.remove('hidden');
+        document.title = "Amigo Secreto - Sorteio Realizado";
+
+        // Generate Master Link (and save to Supabase)
+        generateMasterLink();
+    }
+
+    function renderResults() {
+        resultsList.innerHTML = '';
+
+        // Sort pairs based on the original participants order
+        const sortedPairs = [...currentPairs].sort((a, b) => {
+            return participants.indexOf(a.giver) - participants.indexOf(b.giver);
+        });
+
+        sortedPairs.forEach((pair, index) => {
+            const li = document.createElement('li');
+            li.className = 'result-item';
+
+            li.innerHTML = `
+                <div class="result-info">
+                    <strong><span style="color: var(--text-muted); margin-right: 5px;">${index + 1}.</span> ${pair.giver}</strong>
+                    <small style="margin-top: 4px;">Pegou: ???</small>
+                </div>
+                <div class="result-actions">
+                    <button class="action-btn btn-copy">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <button class="action-btn btn-whatsapp">
+                        <i class="fab fa-whatsapp"></i>
+                    </button>
+                </div>
+            `;
+            resultsList.appendChild(li);
+        });
+    }
+
+    // --- Friendly URL Helpers ---
+
+    function generateSlug(text) {
+        return text
+            .toString()
+            .normalize('NFD') // Split accents
+            .replace(/[\u0300-\u036f]/g, '') // Remove accents
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, '-') // Replace spaces with -
+            .replace(/[^\w\-]+/g, '') // Remove non-word chars
+            .replace(/\-\-+/g, '-'); // Replace multiple - with single -
+    }
+
+    function generateSecretId() {
+        // Generate a random 6-character string (alphanumeric)
+        return Math.random().toString(36).substring(2, 8);
+    }
+
+    async function getUniqueSlug(baseName) {
+        if (!supabase) return null;
+
+        let slug = generateSlug(baseName);
+        let isUnique = false;
+        let counter = 1;
+        let candidateSlug = slug;
+
+        while (!isUnique && counter < 20) { // Limit attempts to avoid infinite loop
+            const { data, error } = await supabase
+                .from('draws')
+                .select('slug')
+                .eq('slug', candidateSlug)
+                .maybeSingle();
+
+            if (!data) {
+                isUnique = true; // Slug not found, so it's unique
+            } else {
+                counter++;
+                candidateSlug = `${slug}-${counter}`;
+            }
+        }
+        return candidateSlug;
+    }
+
+    async function generateMasterLink() {
+        if (!urlDisplay) return;
+
+        const adminToken = generateSecretId(); // Reuse random string generator for admin token
+
+        const masterData = {
+            master: true,
+            pairs: currentPairs,
+            maxValue: maxValueInput.value,
+            revealDate: revealDateInput.value,
+            adminToken: adminToken // Save token in data
+        };
+
+        // Default to legacy encoding if Supabase is down
+        let fullUrl = '';
+        let slug = null;
+
+        if (supabase && participants.length > 0) {
+            // Generate Friendly Slug based on first participant
+            const firstName = participants[0];
+            slug = await getUniqueSlug(firstName);
+        }
+
+        if (slug) {
+            // Use Friendly URL with Admin Token
+            currentSlug = slug;
+            const baseUrl = window.location.href.split('?')[0];
+            fullUrl = `${baseUrl}?id=${slug}&admin=${adminToken}`;
+
+            // Save full data to Supabase
+            await saveToHistory(fullUrl, currentPairs.length, slug, masterData);
+        } else {
+            // Fallback to Legacy URL
+            const encoded = encodeData(masterData);
+            const baseUrl = window.location.href.split('?')[0];
+            fullUrl = `${baseUrl}?data=${encoded}`;
+            await saveToHistory(fullUrl, currentPairs.length, null, null);
+        }
+
+        // Show loading state or full URL first
+        generatedUrlSpan.textContent = fullUrl;
+        urlDisplay.classList.remove('hidden');
+
+        // Automatically update the browser URL so it's saved in history
+        window.history.pushState({ path: fullUrl }, '', fullUrl);
+
+        // Update individual links now that we have the slug (or not)
+        updateIndividualLinks();
+
+        // Try to shorten the URL (optional)
+        try {
+            const shortUrl = await shortenUrl(fullUrl);
+            if (shortUrl) {
+                generatedUrlSpan.textContent = shortUrl;
+            }
+        } catch (error) {
+            console.error("Failed to shorten URL:", error);
+        }
+    }
+
+
+    function updateIndividualLinks() {
+        const items = resultsList.querySelectorAll('.result-item');
+        const maxValue = maxValueInput.value;
+        const revealDate = revealDateInput.value;
+        const baseUrl = window.location.href.split('?')[0]; // Clean URL
+
+        items.forEach((item, index) => {
+            const pair = currentPairs[index];
+            let link = '';
+
+            if (currentSlug && pair.secretId) {
+                // Secure Friendly Link: ?id=slug&u=secretId
+                link = `${baseUrl}?id=${currentSlug}&u=${pair.secretId}`;
+            } else if (currentSlug) {
+                // Fallback for old draws without secretId (shouldn't happen for new ones)
+                const userSlug = generateSlug(pair.giver);
+                link = `${baseUrl}?id=${currentSlug}&u=${userSlug}`;
+            } else {
+                // Legacy Link: ?data=base64
+                const pairData = {
+                    g: pair.giver,
+                    r: pair.receiver,
+                    v: maxValue,
+                    d: revealDate
+                };
+                const encodedData = encodeData(pairData);
+                link = `${baseUrl}?data=${encodedData}`;
+            }
+
+            const copyBtn = item.querySelector('.btn-copy');
+            const whatsappBtn = item.querySelector('.btn-whatsapp');
+
+            // Remove old listeners (cloning is a quick way)
+            const newCopyBtn = copyBtn.cloneNode(true);
+            const newWhatsappBtn = whatsappBtn.cloneNode(true);
+            copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+            whatsappBtn.parentNode.replaceChild(newWhatsappBtn, whatsappBtn);
+
+            newCopyBtn.onclick = () => {
+                navigator.clipboard.writeText(link).then(() => showToast("Link copiado!"));
+            };
+
+            newWhatsappBtn.onclick = () => {
+                const text = `Olá ${pair.giver}! Seu amigo secreto já foi sorteado. Veja quem você tirou aqui: ${link}`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+            };
+        });
     }
 
     function verifyResults() {
         verificationList.innerHTML = '';
         let displayPairs = [...currentPairs];
 
-        // If circle mode, try to order them as a chain for better visualization
         if (circleModeCheckbox.checked && displayPairs.length > 0) {
             const ordered = [];
             let current = displayPairs[0];
             ordered.push(current);
 
-            // Find the next pair where giver is the current receiver
             for (let i = 1; i < displayPairs.length; i++) {
                 const next = displayPairs.find(p => p.giver === current.receiver);
                 if (next) {
@@ -197,13 +698,27 @@ document.addEventListener('DOMContentLoaded', () => {
             displayPairs = ordered;
         }
 
-        displayPairs.forEach(pair => {
+        // Create a consistent color map for participants
+        const colorMap = new Map();
+        const colors = ['text-color-0', 'text-color-1', 'text-color-2', 'text-color-3', 'text-color-4'];
+
+        // Assign colors based on name hash/index from original list to ensure consistency
+        participants.forEach((name, index) => {
+            colorMap.set(name, colors[index % colors.length]);
+        });
+
+        displayPairs.forEach((pair) => {
             const li = document.createElement('li');
             li.className = 'verification-item';
+
+            // Get consistent color for each person
+            const giverColor = colorMap.get(pair.giver) || 'text-color-0';
+            const receiverColor = colorMap.get(pair.receiver) || 'text-color-0';
+
             li.innerHTML = `
-                <span>${pair.giver}</span>
+                <span class="${giverColor}"><strong>${pair.giver}</strong></span>
                 <i class="fas fa-arrow-right verification-arrow"></i>
-                <span>${pair.receiver}</span>
+                <span class="${receiverColor}"><strong>${pair.receiver}</strong></span>
             `;
             verificationList.appendChild(li);
         });
@@ -211,131 +726,10 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyModal.classList.add('active');
     }
 
-    // Standard Derangement (Nobody picks themselves)
-    function drawStandardMode(names) {
-        let shuffled;
-        let isValid = false;
-
-        // Simple rejection sampling for derangement
-        // For small N this is fast enough.
-        while (!isValid) {
-            shuffled = [...names].sort(() => Math.random() - 0.5);
-            isValid = true;
-            for (let i = 0; i < names.length; i++) {
-                if (names[i] === shuffled[i]) {
-                    isValid = false;
-                    break;
-                }
-            }
-
-            // Check for sub-loops? The user asked for "Circle Mode" to avoid sub-loops.
-            // Standard mode allows sub-loops (A->B, B->A).
-        }
-
-        return names.map((giver, i) => ({
-            giver,
-            receiver: shuffled[i]
-        }));
-    }
-
-    // Hamiltonian Cycle (A->B->C->...->A)
-    function drawCircleMode(names) {
-        const shuffled = [...names].sort(() => Math.random() - 0.5);
-        const pairs = [];
-
-        for (let i = 0; i < shuffled.length; i++) {
-            const giver = shuffled[i];
-            const receiver = shuffled[(i + 1) % shuffled.length];
-            pairs.push({ giver, receiver });
-        }
-
-        return pairs;
-    }
-
-    function renderResults(pairs) {
-        resultsList.innerHTML = '';
-        const maxValue = maxValueInput.value;
-        const revealDate = revealDateInput.value;
-
-        pairs.forEach(pair => {
-            const link = generateLink(pair.giver, pair.receiver, maxValue, revealDate);
-            const li = document.createElement('li');
-            li.className = 'result-item';
-            li.innerHTML = `
-                <div class="result-info">
-                    <strong>${pair.giver}</strong>
-                    <small>Pegou: ???</small>
-                </div>
-                <div class="result-actions">
-                    <button class="action-btn btn-copy" title="Copiar Link">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                    <button class="action-btn btn-whatsapp" title="Enviar no WhatsApp">
-                        <i class="fab fa-whatsapp"></i>
-                    </button>
-                </div>
-            `;
-
-            const copyBtn = li.querySelector('.btn-copy');
-            const waBtn = li.querySelector('.btn-whatsapp');
-
-            copyBtn.onclick = () => {
-                navigator.clipboard.writeText(link).then(() => showToast("Link copiado!"));
-            };
-
-            waBtn.onclick = () => {
-                const msg = `Olá ${pair.giver}! Aqui está o link para ver quem você tirou no Amigo Secreto: ${link}`;
-                const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                window.open(waUrl, '_blank');
-            };
-
-            resultsList.appendChild(li);
-        });
-    }
-
-    function generateLink(giver, receiver, value, date) {
-        const payload = {
-            g: giver,
-            r: receiver,
-            v: value,
-            d: date,
-            s: Math.random().toString(36).substring(7) // Salt
-        };
-        const encoded = encodeData(payload);
-
-        const baseUrlInput = document.getElementById('base-url');
-        let baseUrl = window.location.href.split('?')[0]; // Default to current URL without params
-
-        if (baseUrlInput && baseUrlInput.value.trim()) {
-            baseUrl = baseUrlInput.value.trim();
-        }
-
-        try {
-            const url = new URL(baseUrl);
-            url.searchParams.set('data', encoded);
-            return url.toString();
-        } catch (e) {
-            // Fallback if invalid URL provided
-            console.warn("Invalid Base URL, using current location");
-            const url = new URL(window.location.href);
-            url.searchParams.set('data', encoded);
-            return url.toString();
-        }
-    }
-
-    // Simple Base64 encoding with a tiny bit of obfuscation
-    function encodeData(obj) {
-        const str = JSON.stringify(obj);
-        return btoa(encodeURIComponent(str));
-    }
-
-    function decodeData(str) {
-        const decodedStr = decodeURIComponent(atob(str));
-        return JSON.parse(decodedStr);
-    }
-
     function resetApp() {
         participants = [];
+        currentPairs = [];
+        currentSlug = null;
         renderParticipants();
         participantInput.value = '';
         maxValueInput.value = '';
@@ -345,16 +739,24 @@ document.addEventListener('DOMContentLoaded', () => {
         adminView.classList.add('hidden');
         setupView.classList.add('active');
         setupView.classList.remove('hidden');
+        if (urlDisplay) urlDisplay.classList.add('hidden');
 
-        // Clear URL params
         const url = new URL(window.location.href);
         url.searchParams.delete('data');
+        url.searchParams.delete('id');
+        url.searchParams.delete('u');
         window.history.replaceState({}, '', url);
     }
 
     function showToast(msg, type = 'success') {
         toast.textContent = msg;
-        toast.style.background = type === 'error' ? '#f43f5e' : '#10b981';
+        if (type === 'error') {
+            toast.style.background = '#f43f5e';
+        } else if (type === 'info') {
+            toast.style.background = '#3b82f6';
+        } else {
+            toast.style.background = '#10b981';
+        }
         toast.classList.add('show');
         setTimeout(() => {
             toast.classList.remove('show');
@@ -362,8 +764,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function confettiEffect() {
-        // Simple confetti using canvas or DOM? 
-        // Let's use a simple CSS/DOM approach for lightweight effect
         const colors = ['#8b5cf6', '#f43f5e', '#3b82f6', '#10b981', '#fbbf24'];
 
         for (let i = 0; i < 50; i++) {
@@ -381,7 +781,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => confetti.remove(), 5000);
         }
 
-        // Add keyframes dynamically if not present
         if (!document.getElementById('confetti-style')) {
             const style = document.createElement('style');
             style.id = 'confetti-style';
@@ -392,5 +791,17 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             document.head.appendChild(style);
         }
+    }
+
+    // Helper for encoding/decoding data
+    function encodeData(obj) {
+        const str = JSON.stringify(obj);
+        // Use Base64 for simple encoding (not encryption, but hides text)
+        return btoa(encodeURIComponent(str));
+    }
+
+    function decodeData(str) {
+        const decodedStr = decodeURIComponent(atob(str));
+        return JSON.parse(decodedStr);
     }
 });

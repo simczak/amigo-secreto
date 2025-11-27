@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amigo Secreto - Histórico</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .history-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+
+        .history-item:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+        }
+
+        .history-info h3 {
+            margin: 0 0 0.5rem 0;
+            color: var(--text-color);
+            font-size: 1.1rem;
+        }
+
+        .history-info p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-animation">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="container">
+        <header class="main-header">
+            <div class="logo-container">
+                <i class="fas fa-gift logo-icon"></i>
+                <h1>Histórico de Sorteios</h1>
+            </div>
+            <p class="subtitle">Sorteios realizados neste dispositivo</p>
+        </header>
+
+        <section class="card">
+            <div class="card-body">
+                <ul id="history-list" class="history-list">
+                    <!-- Items will be injected here -->
+                </ul>
+                <div id="empty-state" class="empty-state hidden">
+                    <i class="fas fa-history"></i>
+                    <p>Nenhum sorteio encontrado no histórico.</p>
+                </div>
+            </div>
+            <footer class="card-footer">
+                <button id="clear-history-btn" class="btn-secondary hidden">
+                    <i class="fas fa-trash"></i> Limpar Histórico Local
+                </button>
+                <a href="index.html" class="btn-primary">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </footer>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js?v=3"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const historyList = document.getElementById('history-list');
+            const emptyState = document.getElementById('empty-state');
+            const clearBtn = document.getElementById('clear-history-btn');
+            const toast = document.getElementById('toast');
+
+            // Initialize Supabase
+            let supabase = null;
+            if (typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && CONFIG.SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+                try {
+                    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+                } catch (e) {
+                    console.error("Supabase init failed in admin", e);
+                }
+            }
+
+            async function loadHistory() {
+                historyList.innerHTML = '';
+                let history = [];
+                let source = 'local';
+
+                // Try Supabase first
+                if (supabase) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('draws')
+                            .select('*')
+                            .order('created_at', { ascending: false });
+
+                        if (!error && data) {
+                            history = data;
+                            source = 'supabase';
+                        }
+                    } catch (e) {
+                        console.error("Supabase fetch failed", e);
+                    }
+                }
+
+                // Fallback to LocalStorage
+                if (source === 'local') {
+                    const localData = localStorage.getItem('amigoSecretoHistory');
+                    if (localData) {
+                        history = JSON.parse(localData);
+                    }
+                    // Show clear button only for local history
+                    clearBtn.classList.remove('hidden');
+                } else {
+                    clearBtn.classList.add('hidden');
+                }
+
+                if (history.length === 0) {
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                emptyState.classList.add('hidden');
+
+                history.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+
+                    const date = new Date(item.created_at || item.date).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    const count = item.participants_count || item.participants;
+                    const url = item.url;
+
+                    li.innerHTML = `
+                        <div class="history-info">
+                            <h3>Sorteio de ${date}</h3>
+                            <p>${count} participantes</p>
+                        </div>
+                        <div class="history-actions">
+                            <a href="${url}" class="btn-icon" target="_blank" title="Abrir Sorteio">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                        </div>
+                    `;
+                    historyList.appendChild(li);
+                });
+            }
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm('Tem certeza que deseja limpar todo o histórico?')) {
+                    localStorage.removeItem('amigoSecretoHistory');
+                    loadHistory();
+                    showToast('Histórico limpo com sucesso!');
+                }
+            });
+
+            function showToast(msg) {
+                toast.textContent = msg;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            }
+
+            loadHistory();
+        });
+    </script>
+</body>
+
+</html>

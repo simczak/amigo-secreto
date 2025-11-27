@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=10">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -45,26 +45,24 @@
                 <div class="settings-grid">
                     <div class="input-group">
                         <label for="max-value">Valor Máximo (R$)</label>
-                        <input type="number" id="max-value" placeholder="Ex: 50,00">
+                        <div class="input-wrapper">
+                            <span style="align-self: center; color: var(--text-muted);">R$</span>
+                            <input type="number" id="max-value" placeholder="Ex: 50,00">
+                        </div>
                     </div>
+
                     <div class="input-group">
                         <label for="reveal-date">Data da Revelação</label>
                         <input type="date" id="reveal-date">
                     </div>
                 </div>
 
-                <div class="input-group">
-                    <label for="base-url">Link do Site</label>
-                    <input type="url" id="base-url" value="https://simczak.github.io/amigo-secreto/" readonly
-                        style="background-color: var(--surface-hover); opacity: 0.8; cursor: not-allowed;">
-                    <small style="color: var(--text-muted); font-size: 0.8rem;">Link fixo para funcionamento correto no
-                        GitHub Pages.</small>
-                </div>
+                <div class="divider"></div>
 
                 <div class="checkbox-group">
                     <input type="checkbox" id="circle-mode">
                     <label for="circle-mode">
-                        <span class="checkbox-custom"></span>
+                        <div class="checkbox-custom"></div>
                         <div>
                             <strong>Círculo Completo</strong>
                             <small>Garante um único ciclo de presentes (A->B->C->A)</small>
@@ -92,10 +90,23 @@
             </div>
 
             <footer class="card-footer">
-                <button id="verify-btn" class="btn-secondary" style="margin-bottom: 10px;">Verificar Sorteio</button>
-                <button id="reset-btn" class="btn-secondary">Novo Sorteio</button>
+                <button id="verify-btn" class="btn-secondary" style="margin-bottom: 10px;">
+                    <i class="fas fa-list-check"></i> Verificar Sorteio
+                </button>
+                <button id="reset-btn" class="btn-secondary">
+                    <i class="fas fa-plus"></i> Novo Sorteio
+                </button>
             </footer>
         </section>
+
+        <!-- URL Display (External Card) -->
+        <div id="url-display" class="url-display-container hidden">
+            <p>Link deste sorteio (Salve para acessar depois):</p>
+            <div class="url-box">
+                <span id="generated-url">...</span>
+                <button id="copy-url-btn" class="btn-icon-small"><i class="fas fa-copy"></i></button>
+            </div>
+        </div>
 
         <!-- Reveal View -->
         <section id="reveal-view" class="card hidden">
@@ -153,9 +164,12 @@
         </div>
     </div>
 
-    <div id="toast" class="toast">Link copiado!</div>
+    <div id="toast" class="toast"></div>
 
-    <script src="script.js"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js?v=10"></script>
+    <script src="script.js?v=10"></script>
 </body>
 
 </html>
