@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         copyUrlBtn.addEventListener('click', () => {
             const url = generatedUrlSpan.textContent;
             if (url && url !== '...') {
-                navigator.clipboard.writeText(url).then(() => showToast("Link copiado!"));
+                navigator.clipboard.writeText(url).then(() => showToast("Link copiado!", "success", copyUrlBtn));
             }
         });
     }
@@ -92,94 +92,147 @@ document.addEventListener('DOMContentLoaded', () => {
         const userParam = urlParams.get('u'); // User for individual link (Secret ID or Slug)
         const adminParam = urlParams.get('admin'); // Admin Token
 
+        const loadingView = document.getElementById('loading-view');
+
+        // Helper to switch views
+        const showView = (viewId) => {
+            loadingView.classList.remove('active');
+            loadingView.style.display = 'none'; // Ensure it's hidden
+
+            if (viewId === 'setup-view') {
+                setupView.classList.add('active');
+            } else if (viewId === 'admin-view') {
+                adminView.classList.remove('hidden');
+                adminView.classList.add('active'); // Ensure active class if used
+            } else if (viewId === 'reveal-view') {
+                revealView.classList.remove('hidden');
+            }
+        };
+
+        // If no parameters, go straight to setup
+        if (!dataParam && !idParam) {
+            showView('setup-view');
+            return;
+        }
+
         // Case 1: Legacy URL (base64 data)
         if (dataParam) {
             try {
                 const decoded = decodeData(dataParam);
                 if (decoded.master) {
                     restoreAdminView(decoded);
+                    showView('admin-view');
                 } else {
                     showRevealView(decoded);
+                    showView('reveal-view');
                 }
-                return;
             } catch (e) {
                 console.error("Invalid legacy data", e);
+                showToast("Link inválido ou corrompido.");
+                showView('setup-view');
             }
+            return;
         }
 
-        // Case 2: Friendly URL (Supabase Slug)
+        // Case 2: Friendly URL (Supabase)
         if (idParam) {
             if (!supabase) {
-                showToast("Erro: Banco de dados não conectado para carregar este sorteio.", "error");
-                showSetupView();
+                showToast("Erro de conexão com o banco de dados.");
+                showView('setup-view');
                 return;
             }
 
             try {
-                // Fetch draw data from Supabase
-                const { data, error } = await supabase
+                // Fetch draw data
+                const { data: draw, error } = await supabase
                     .from('draws')
-                    .select('draw_data')
+                    .select('*')
                     .eq('slug', idParam)
                     .single();
 
-                if (error || !data) {
-                    console.error("Draw not found or error:", error);
-                    showToast("Sorteio não encontrado.", "error");
-                    showSetupView();
+                if (error || !draw) {
+                    console.error("Draw not found", error);
+                    showToast("Sorteio não encontrado.");
+                    showView('setup-view');
                     return;
                 }
 
-                const drawData = data.draw_data;
-                currentSlug = idParam; // Store for context
+                currentPairs = draw.draw_data.pairs;
+                participants = currentPairs.map(p => p.giver);
+                currentSlug = draw.slug;
 
-                if (userParam) {
-                    // Individual Link: Find the pair for this user
-                    // Try to find by Secret ID first (Secure)
-                    let pair = drawData.pairs.find(p => p.secretId === userParam);
+                // Restore settings
+                if (draw.draw_data.maxValue) maxValueInput.value = draw.draw_data.maxValue;
+                if (draw.draw_data.revealDate) revealDateInput.value = draw.draw_data.revealDate;
 
-                    // Fallback: Try to find by Name Slug (Legacy/Insecure - for old draws only)
-                    if (!pair) {
-                        pair = drawData.pairs.find(p => generateSlug(p.giver) === userParam);
+                if (adminParam) {
+                    // Admin View
+                    if (adminParam === draw.draw_data.adminToken) {
+                        renderResults();
+                        generateMasterLink(); // Regenerate link display
+                        showView('admin-view');
+                    } else {
+                        showToast("Acesso negado. Token inválido.");
+                        showView('setup-view');
                     }
+                } else if (userParam) {
+                    // Reveal View
+                    // Check if userParam matches a secretId or a slug (legacy fallback)
+                    const pair = currentPairs.find(p => p.secretId === userParam || generateSlug(p.giver) === userParam);
 
                     if (pair) {
                         const revealData = {
                             g: pair.giver,
                             r: pair.receiver,
-                            v: drawData.maxValue,
-                            d: drawData.revealDate
+                            v: draw.draw_data.maxValue,
+                            d: draw.draw_data.revealDate
                         };
                         showRevealView(revealData);
+                        showView('reveal-view');
                     } else {
-                        showToast("Participante não encontrado neste sorteio.", "error");
-                        showSetupView();
+                        showToast("Participante não encontrado neste sorteio.");
+                        showView('setup-view');
                     }
                 } else {
-                    // Master Link: Check for Admin Token
-                    // If draw has an adminToken, REQUIRE it to match
-                    if (drawData.adminToken) {
-                        if (adminParam === drawData.adminToken) {
-                            restoreAdminView(drawData);
-                        } else {
-                            showToast("Acesso Negado: Link de administrador inválido.", "error");
-                            showSetupView();
-                        }
-                    } else {
-                        // Legacy draws without adminToken: Allow access (or block if you prefer strict security)
-                        // For now, allowing backward compatibility
-                        restoreAdminView(drawData);
-                    }
+                    // No user param, maybe show a generic "Enter your code" screen?
+                    // For now, redirect to setup
+                    showView('setup-view');
                 }
 
             } catch (e) {
-                console.error("Exception loading draw:", e);
-                showSetupView();
+                console.error("Error fetching draw", e);
+                showToast("Erro ao carregar sorteio.");
+                showView('setup-view');
             }
-        } else {
-            showSetupView();
         }
     }
+
+    async function saveToHistory(fullUrl, count, slug, drawData) {
+        if (!supabase) return;
+
+        try {
+            const { error } = await supabase
+                .from('draws')
+                .insert([
+                    {
+                        slug: slug,
+                        draw_data: drawData,
+                        created_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (error) {
+                console.error("Error saving to Supabase:", error);
+            } else {
+                console.log("Draw saved to Supabase successfully!");
+            }
+        } catch (e) {
+            console.error("Exception saving to Supabase:", e);
+        }
+    }
+
+
+
 
     // ... (rest of functions) ...
 
@@ -673,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
             whatsappBtn.parentNode.replaceChild(newWhatsappBtn, whatsappBtn);
 
             newCopyBtn.onclick = () => {
-                navigator.clipboard.writeText(link).then(() => showToast("Link copiado!"));
+                navigator.clipboard.writeText(link).then(() => showToast("Link copiado!", "success", newCopyBtn));
             };
 
             newWhatsappBtn.onclick = () => {
@@ -752,16 +805,36 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.replaceState({}, '', url);
     }
 
-    function showToast(msg, type = 'success') {
+    function showToast(msg, type = 'success', targetEl = null) {
         toast.textContent = msg;
+        toast.className = 'toast show';
+
         if (type === 'error') {
-            toast.style.background = '#f43f5e';
-        } else if (type === 'info') {
-            toast.style.background = '#3b82f6';
+            toast.style.backgroundColor = '#ef4444';
         } else {
-            toast.style.background = '#10b981';
+            toast.style.backgroundColor = '#10b981';
         }
-        toast.classList.add('show');
+
+        if (targetEl) {
+            const rect = targetEl.getBoundingClientRect();
+
+            // Position above the button using viewport coordinates (fixed positioning)
+            const topPos = Math.max(10, rect.top - 50);
+
+            toast.style.position = 'fixed';
+            toast.style.top = topPos + 'px';
+            toast.style.left = (rect.left + (rect.width / 2)) + 'px';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.bottom = 'auto';
+        } else {
+            // Fallback to center bottom
+            toast.style.position = 'fixed';
+            toast.style.left = '50%';
+            toast.style.bottom = '30px';
+            toast.style.top = 'auto';
+            toast.style.transform = 'translateX(-50%)';
+        }
+
         setTimeout(() => {
             toast.classList.remove('show');
         }, 3000);

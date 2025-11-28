@@ -20,8 +20,15 @@
     </div>
 
     <main class="container">
+        <!-- Loading View -->
+        <section id="loading-view" class="card active"
+            style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px;">
+            <div class="loader"></div>
+            <p style="margin-top: 20px; color: var(--text-muted);">Carregando...</p>
+        </section>
+
         <!-- Setup View -->
-        <section id="setup-view" class="card active">
+        <section id="setup-view" class="card">
             <header class="card-header">
                 <h1>Amigo Secreto</h1>
                 <p>Organize seu sorteio com estilo e facilidade.</p>
