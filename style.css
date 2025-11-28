@@ -172,6 +172,36 @@ input:focus {
     border-color: var(--primary-color);
 }
 
+/* Mobile Date Input Fixes */
+input[type="date"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-height: 52px;
+    /* Ensure consistent height with other inputs */
+    display: block;
+    position: relative;
+    color-scheme: dark;
+    /* Forces dark mode picker on supported browsers */
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin-top: 0;
+    /* Reset any default margins */
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    /* Ensure icon is white */
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
 .btn-icon {
     background: var(--primary-color);
     border: none;
@@ -834,4 +864,376 @@ input:focus {
     100% {
         transform: rotate(360deg);
     }
+}
+
+/* Toast Notification - Premium Glass Style */
+.toast {
+    visibility: hidden;
+    min-width: 200px;
+    /* Dark glass background */
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    /* Subtle border */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    text-align: center;
+    border-radius: 12px;
+    padding: 12px 24px;
+    position: fixed;
+    z-index: 9999;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    /* Deep shadow for elevation */
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06),
+        0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+    transition: none;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Success Variant */
+.toast.success {
+    border-left: 4px solid #10b981;
+}
+
+/* Error Variant */
+.toast.error {
+    border-left: 4px solid #ef4444;
+}
+
+/* Add icon via pseudo-element */
+.toast.success::before {
+    content: '\f00c';
+    /* FontAwesome check */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: #10b981;
+}
+
+.toast.error::before {
+    content: '\f071';
+    /* FontAwesome exclamation-triangle */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: #ef4444;
+}
+
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+    animation: toastSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast.hide {
+    animation: toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(8px) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+@keyframes toastSlideOut {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px) scale(0.96);
+    }
+}
+
+/* Copy Button Success Animation */
+.action-btn.copied,
+.btn-icon-small.copied {
+    animation: copySuccess 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes copySuccess {
+    0% {
+        transform: scale(1);
+    }
+
+    25% {
+        transform: scale(1.2);
+        color: #10b981;
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    75% {
+        transform: scale(1.15);
+    }
+
+}
+
+/* Pink */
+.text-color-2 {
+    color: #22d3ee;
+}
+
+/* Cyan */
+.text-color-3 {
+    color: #facc15;
+}
+
+/* Yellow */
+.text-color-4 {
+    color: #4ade80;
+}
+
+/* Green */
+
+.btn-icon-small {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s;
+}
+
+.btn-icon-small:hover {
+    color: var(--primary-color);
+}
+
+/* Utility */
+.hidden {
+    display: none !important;
+}
+
+/* Reveal Animation */
+.reveal-content {
+    animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Loading View */
+.loader {
+    width: 48px;
+    height: 48px;
+    border: 5px solid var(--card-border);
+    border-bottom-color: var(--primary-color);
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Toast Notification - Premium Glass Style */
+.toast {
+    visibility: hidden;
+    min-width: 200px;
+    /* Dark glass background */
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    /* Subtle border */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    text-align: center;
+    border-radius: 12px;
+    padding: 12px 24px;
+    position: fixed;
+    z-index: 9999;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    /* Deep shadow for elevation */
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06),
+        0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+    transition: none;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Success Variant */
+.toast.success {
+    border-left: 4px solid #10b981;
+}
+
+/* Error Variant */
+.toast.error {
+    border-left: 4px solid #ef4444;
+}
+
+/* Add icon via pseudo-element */
+.toast.success::before {
+    content: '\f00c';
+    /* FontAwesome check */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: #10b981;
+}
+
+.toast.error::before {
+    content: '\f071';
+    /* FontAwesome exclamation-triangle */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: #ef4444;
+}
+
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+    animation: toastSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast.hide {
+    animation: toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(8px) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+@keyframes toastSlideOut {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px) scale(0.96);
+    }
+}
+
+/* Copy Button Success Animation */
+.action-btn.copied,
+.btn-icon-small.copied {
+    animation: copySuccess 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes copySuccess {
+    0% {
+        transform: scale(1);
+    }
+
+    25% {
+        transform: scale(1.2);
+        color: #10b981;
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    75% {
+        transform: scale(1.15);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* URL Display Card */
+.url-display-container {
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    margin-top: 24px;
+    text-align: center;
+    animation: slideIn 0.5s ease;
+}
+
+.url-display-container p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+}
+
+.url-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    gap: 10px;
+}
+
+#generated-url {
+    color: var(--primary-color);
+    font-family: monospace;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Suspense Title */
+.suspense-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 32px;
+    text-align: center;
+    animation: pulse 3s infinite;
 }

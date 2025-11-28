@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayValue = document.getElementById('display-value');
 
     const toast = document.getElementById('toast');
+    let toastTimeout = null; // Track toast timeout to prevent overlapping
 
     // New Elements for URL Display
     const urlDisplay = document.getElementById('url-display');
@@ -78,7 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
         copyUrlBtn.addEventListener('click', () => {
             const url = generatedUrlSpan.textContent;
             if (url && url !== '...') {
-                navigator.clipboard.writeText(url).then(() => showToast("Link copiado!", "success", copyUrlBtn));
+                navigator.clipboard.writeText(url).then(() => {
+                    showToast("Link copiado!", "success", copyUrlBtn);
+                    copyUrlBtn.classList.add('copied');
+                    setTimeout(() => copyUrlBtn.classList.remove('copied'), 600);
+                });
             }
         });
     }
@@ -726,7 +731,11 @@ document.addEventListener('DOMContentLoaded', () => {
             whatsappBtn.parentNode.replaceChild(newWhatsappBtn, whatsappBtn);
 
             newCopyBtn.onclick = () => {
-                navigator.clipboard.writeText(link).then(() => showToast("Link copiado!", "success", newCopyBtn));
+                navigator.clipboard.writeText(link).then(() => {
+                    showToast("Link copiado!", "success", newCopyBtn);
+                    newCopyBtn.classList.add('copied');
+                    setTimeout(() => newCopyBtn.classList.remove('copied'), 600);
+                });
             };
 
             newWhatsappBtn.onclick = () => {
@@ -806,25 +815,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showToast(msg, type = 'success', targetEl = null) {
+        // Clear any existing timeout to prevent overlapping toasts
+        if (toastTimeout) {
+            clearTimeout(toastTimeout);
+            toast.classList.remove('show', 'hide');
+        }
+
         toast.textContent = msg;
         toast.className = 'toast show';
 
         if (type === 'error') {
-            toast.style.backgroundColor = '#ef4444';
+            toast.classList.add('error');
         } else {
-            toast.style.backgroundColor = '#10b981';
+            toast.classList.add('success');
         }
 
         if (targetEl) {
             const rect = targetEl.getBoundingClientRect();
 
             // Position above the button using viewport coordinates (fixed positioning)
-            const topPos = Math.max(10, rect.top - 50);
+            const topPos = Math.max(10, rect.top - 60);
 
             toast.style.position = 'fixed';
             toast.style.top = topPos + 'px';
             toast.style.left = (rect.left + (rect.width / 2)) + 'px';
-            toast.style.transform = 'translateX(-50%)';
             toast.style.bottom = 'auto';
         } else {
             // Fallback to center bottom
@@ -832,12 +846,16 @@ document.addEventListener('DOMContentLoaded', () => {
             toast.style.left = '50%';
             toast.style.bottom = '30px';
             toast.style.top = 'auto';
-            toast.style.transform = 'translateX(-50%)';
         }
 
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
+        // Hide toast after 2 seconds with slide-out animation
+        toastTimeout = setTimeout(() => {
+            toast.classList.add('hide');
+            setTimeout(() => {
+                toast.classList.remove('show', 'hide');
+                toastTimeout = null;
+            }, 300); // Match animation duration
+        }, 2000);
     }
 
     function confettiEffect() {
