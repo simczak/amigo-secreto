@@ -108,11 +108,23 @@
 
         <!-- URL Display (External Card) -->
         <div id="url-display" class="url-display-container hidden">
+            <h3 class="admin-title"><i class="fas fa-user-shield"></i> Acesso do Admin</h3>
             <p>Link deste sorteio (Salve para acessar depois):</p>
-            <div class="url-box">
-                <span id="generated-url">...</span>
-                <button id="copy-url-btn" class="btn-icon-small"><i class="fas fa-copy"></i></button>
+
+            <div id="url-loading" class="url-loading hidden">
+                <div class="spinner-small"></div>
+                <span>Gerando link...</span>
             </div>
+
+            <div id="url-content" class="url-content">
+                <div class="url-box">
+                    <span id="generated-url">...</span>
+                    <button id="copy-url-btn" class="btn-icon-small"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+
+            <p class="admin-warning"><i class="fas fa-exclamation-triangle"></i> Não compartilhe esse link com ninguém
+                do grupo</p>
         </div>
 
         <!-- Reveal View -->

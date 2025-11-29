@@ -640,6 +640,16 @@ document.addEventListener('DOMContentLoaded', () => {
             adminToken: adminToken // Save token in data
         };
 
+        // --- UI UPDATE: Show Loading State Immediately ---
+        const urlLoading = document.getElementById('url-loading');
+        const urlContent = document.getElementById('url-content');
+
+        urlDisplay.classList.remove('hidden');
+        if (urlLoading) urlLoading.classList.remove('hidden');
+        if (urlContent) urlContent.classList.add('hidden');
+        generatedUrlSpan.textContent = '...';
+        // -------------------------------------------------
+
         // Default to legacy encoding if Supabase is down
         let fullUrl = '';
         let slug = null;
@@ -666,15 +676,35 @@ document.addEventListener('DOMContentLoaded', () => {
             await saveToHistory(fullUrl, currentPairs.length, null, null);
         }
 
-        // Show loading state or full URL first
+        // --- UI UPDATE: Show Result ---
         generatedUrlSpan.textContent = fullUrl;
-        urlDisplay.classList.remove('hidden');
+        if (urlLoading) urlLoading.classList.add('hidden');
+        if (urlContent) urlContent.classList.remove('hidden');
+        // ------------------------------
 
         // Automatically update the browser URL so it's saved in history
         window.history.pushState({ path: fullUrl }, '', fullUrl);
 
         // Update individual links now that we have the slug (or not)
         updateIndividualLinks();
+
+        // Update Copy Button for Admin Link
+        if (copyUrlBtn) {
+            // Remove old listeners to avoid duplicates (simple clone replacement)
+            const newCopyBtn = copyUrlBtn.cloneNode(true);
+            copyUrlBtn.parentNode.replaceChild(newCopyBtn, copyUrlBtn);
+
+            newCopyBtn.addEventListener('click', () => {
+                const url = generatedUrlSpan.textContent;
+                if (url && url !== '...') {
+                    navigator.clipboard.writeText(url).then(() => {
+                        showToast("Copiado, não compartilhe esse link, pois ele revela todo o resultado do sorteio.", "warning", newCopyBtn);
+                        newCopyBtn.classList.add('copied');
+                        setTimeout(() => newCopyBtn.classList.remove('copied'), 600);
+                    });
+                }
+            });
+        }
 
         // Try to shorten the URL (optional)
         try {
