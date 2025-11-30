@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let participants = [];
     let currentPairs = [];
     let currentSlug = null; // Store the current draw's slug
+    let restrictions = new Map(); // Map<string, Set<string>>
 
     // DOM Elements
     const setupView = document.getElementById('setup-view');
@@ -55,6 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const generatedUrlSpan = document.getElementById('generated-url');
     const copyUrlBtn = document.getElementById('copy-url-btn');
 
+    // Restrictions Modal Elements
+    const restrictionsModal = document.getElementById('restrictions-modal');
+    const restrictionsList = document.getElementById('restrictions-list');
+    const saveRestrictionsBtn = document.getElementById('save-restrictions-btn');
+    const restrictionGiverName = document.getElementById('restriction-giver-name');
+    let currentRestrictionGiver = null;
+
+    const redrawBtn = document.getElementById('redraw-btn');
+    let wasRedrawn = false;
+
     // --- Initialization ---
     checkUrlForReveal();
 
@@ -67,7 +78,22 @@ document.addEventListener('DOMContentLoaded', () => {
     drawBtn.addEventListener('click', performDraw);
     resetBtn.addEventListener('click', resetApp);
     verifyBtn.addEventListener('click', verifyResults);
-    closeModalBtn.addEventListener('click', () => verifyModal.classList.remove('active'));
+
+    closeModalBtn.addEventListener('click', () => {
+        verifyModal.classList.remove('active');
+        if (wasRedrawn) {
+            showToast("Links atualizados com o novo sorteio!", "success");
+            wasRedrawn = false;
+        }
+    });
+
+    if (redrawBtn) {
+        redrawBtn.addEventListener('click', redraw);
+    }
+
+    if (saveRestrictionsBtn) {
+        saveRestrictionsBtn.addEventListener('click', saveRestrictions);
+    }
 
     giftBoxTrigger.addEventListener('click', () => {
         giftBoxTrigger.style.display = 'none';
@@ -183,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (userParam) {
                     // Reveal View
                     // Check if userParam matches a secretId or a slug (legacy fallback)
-                    const pair = currentPairs.find(p => p.secretId === userParam || generateSlug(p.giver) === userParam);
+                    const pair = currentPairs.find(p => p.secretId === userParam || GameLogic.generateSlug(p.giver) === userParam);
 
                     if (pair) {
                         const revealData = {
@@ -212,93 +238,116 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function saveToHistory(fullUrl, count, slug, drawData) {
-        if (!supabase) return;
 
-        try {
-            const { error } = await supabase
-                .from('draws')
-                .insert([
-                    {
-                        slug: slug,
-                        draw_data: drawData,
-                        created_at: new Date().toISOString()
-                    }
-                ]);
-
-            if (error) {
-                console.error("Error saving to Supabase:", error);
-            } else {
-                console.log("Draw saved to Supabase successfully!");
-            }
-        } catch (e) {
-            console.error("Exception saving to Supabase:", e);
-        }
-    }
 
 
 
 
     // ... (rest of functions) ...
 
-    async function generateMasterLink() {
-        if (!urlDisplay) return;
 
-        const adminToken = generateSecretId(); // Reuse random string generator for admin token
 
-        const masterData = {
-            master: true,
-            pairs: currentPairs,
-            maxValue: maxValueInput.value,
-            revealDate: revealDateInput.value,
-            adminToken: adminToken // Save token in data
-        };
+    function openRestrictionsModal(giverName) {
+        currentRestrictionGiver = giverName;
+        restrictionGiverName.textContent = giverName;
+        restrictionsList.innerHTML = '';
 
-        // Default to legacy encoding if Supabase is down
-        let fullUrl = '';
-        let slug = null;
+        const currentRestricted = restrictions.get(giverName) || new Set();
 
-        if (supabase && participants.length > 0) {
-            // Generate Friendly Slug based on first participant
-            const firstName = participants[0];
-            slug = await getUniqueSlug(firstName);
-        }
+        participants.forEach(p => {
+            if (p === giverName) return; // Can't restrict self
 
-        if (slug) {
-            // Use Friendly URL with Admin Token
-            currentSlug = slug;
-            const baseUrl = window.location.href.split('?')[0];
-            fullUrl = `${baseUrl}?id=${slug}&admin=${adminToken}`;
+            const li = document.createElement('li');
+            li.className = 'participant-item';
+            li.style.cursor = 'pointer';
 
-            // Save full data to Supabase
-            await saveToHistory(fullUrl, currentPairs.length, slug, masterData);
-        } else {
-            // Fallback to Legacy URL
-            const encoded = encodeData(masterData);
-            const baseUrl = window.location.href.split('?')[0];
-            fullUrl = `${baseUrl}?data=${encoded}`;
-            await saveToHistory(fullUrl, currentPairs.length, null, null);
-        }
+            const isChecked = currentRestricted.has(p) ? 'checked' : '';
 
-        // Show loading state or full URL first
-        generatedUrlSpan.textContent = fullUrl;
-        urlDisplay.classList.remove('hidden');
+            li.innerHTML = `
+                <label style="display: flex; align-items: center; width: 100%; cursor: pointer; padding: 5px 0;">
+                    <input type="checkbox" value="${p}" ${isChecked} style="margin-right: 10px; width: 20px; height: 20px; accent-color: var(--primary-color);">
+                    <span>${p}</span>
+                </label>
+            `;
+            restrictionsList.appendChild(li);
+        });
 
-        // Automatically update the browser URL so it's saved in history
-        window.history.pushState({ path: fullUrl }, '', fullUrl);
+        restrictionsModal.classList.add('active');
+    }
 
-        // Update individual links now that we have the slug (or not)
-        updateIndividualLinks();
+    function saveRestrictions() {
+        if (!currentRestrictionGiver) return;
 
-        // Try to shorten the URL (optional)
-        try {
-            const shortUrl = await shortenUrl(fullUrl);
-            if (shortUrl) {
-                generatedUrlSpan.textContent = shortUrl;
+        const checkboxes = restrictionsList.querySelectorAll('input[type="checkbox"]');
+        const restrictedSet = new Set();
+
+        checkboxes.forEach(cb => {
+            if (cb.checked) {
+                restrictedSet.add(cb.value);
             }
-        } catch (error) {
-            console.error("Failed to shorten URL:", error);
+        });
+
+        if (restrictedSet.size > 0) {
+            restrictions.set(currentRestrictionGiver, restrictedSet);
+        } else {
+            restrictions.delete(currentRestrictionGiver);
         }
+
+        restrictionsModal.classList.remove('active');
+        renderParticipants();
+    }
+
+    function redraw() {
+        if (participants.length < 3) return;
+
+        // Use GameLogic to perform the draw
+        const restrictionsObj = {};
+        restrictions.forEach((set, key) => {
+            restrictionsObj[key] = Array.from(set);
+        });
+
+        const result = GameLogic.performDrawLogic(participants, circleModeCheckbox.checked, restrictionsObj);
+
+        if (!result.success) {
+            showToast(result.error, "error");
+            return;
+        }
+
+        currentPairs = result.pairs;
+        wasRedrawn = true;
+
+        // Update UI
+        renderResults();
+
+        // Update Verification List in Modal
+        const verificationList = document.getElementById('verification-list');
+        if (verificationList) {
+            verificationList.innerHTML = '';
+            // Sort pairs based on the original participants order
+            const sortedPairs = [...currentPairs].sort((a, b) => {
+                return participants.indexOf(a.giver) - participants.indexOf(b.giver);
+            });
+
+            sortedPairs.forEach((pair, index) => {
+                const li = document.createElement('li');
+                li.className = 'verification-item';
+
+                // Cycling colors for visual distinction
+                const colorClass = `text-color-${index % 5}`;
+
+                li.innerHTML = `
+                    <span class="${colorClass}"><strong>${pair.giver}</strong></span>
+                    <i class="fas fa-arrow-right verification-arrow"></i>
+                    <span class="${colorClass}"><strong>${pair.receiver}</strong></span>
+                `;
+                verificationList.appendChild(li);
+            });
+        }
+
+        // Save new results to Supabase (updates the existing slug if possible, or creates new)
+        generateMasterLink();
+
+        showToast("Sorteio refeito com sucesso!", "success");
     }
 
     async function saveToHistory(url, count, slug = null, drawData = null) {
@@ -361,14 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showSetupView() {
-        setupView.classList.add('active');
-        adminView.classList.remove('active');
-        revealView.classList.remove('active');
-        setupView.classList.remove('hidden');
-        adminView.classList.add('hidden');
-        revealView.classList.add('hidden');
-    }
+
 
     function restoreAdminView(data) {
         setupView.classList.remove('active');
@@ -461,12 +503,30 @@ document.addEventListener('DOMContentLoaded', () => {
         participants.forEach((name, index) => {
             const li = document.createElement('li');
             li.className = 'participant-item';
+
+            // Check if has restrictions to show indicator
+            const hasRestrictions = restrictions.has(name) && restrictions.get(name).size > 0;
+            const restrictionClass = hasRestrictions ? 'text-danger' : 'text-muted';
+            const restrictionIcon = hasRestrictions ? 'fa-ban' : 'fa-ban'; // Can change icon if needed
+
             li.innerHTML = `
-                <span><span style="color: var(--text-muted); margin-right: 5px;">${index + 1}.</span> <strong>${name}</strong></span>
-                <button class="remove-btn">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div style="display: flex; flex-direction: column; flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: var(--text-muted); font-size: 0.9em;">${index + 1}.</span>
+                        <strong>${name}</strong>
+                    </div>
+                    ${hasRestrictions ? `<small style="color: var(--accent-color); margin-left: 25px; font-size: 0.8em;">🚫 Não tira: ${Array.from(restrictions.get(name)).join(', ')}</small>` : ''}
+                </div>
+                <div class="action-buttons" style="display: flex; gap: 5px;">
+                    <button class="btn-icon restriction-btn" title="Restrições (Quem não pode tirar)">
+                        <i class="fas ${restrictionIcon} ${restrictionClass}"></i>
+                    </button>
+                    <button class="btn-icon remove-btn" title="Remover">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             `;
+            li.querySelector('.restriction-btn').addEventListener('click', () => openRestrictionsModal(name));
             li.querySelector('.remove-btn').addEventListener('click', () => removeParticipant(name));
             participantsList.appendChild(li);
         });
@@ -481,66 +541,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-    }
+
 
     function performDraw() {
         if (participants.length < 3) return;
 
-        // Shuffle and pair
-        let shuffled = [...participants];
+        // Use GameLogic to perform the draw
+        const restrictionsObj = {};
+        restrictions.forEach((set, key) => {
+            restrictionsObj[key] = Array.from(set);
+        });
 
-        if (circleModeCheckbox.checked) {
-            // Circle Mode: A -> B -> C -> A
-            shuffleArray(shuffled);
-            currentPairs = [];
-            for (let i = 0; i < shuffled.length; i++) {
-                let giver = shuffled[i];
-                let receiver = shuffled[(i + 1) % shuffled.length];
-                // Add Secret ID for secure linking
-                currentPairs.push({
-                    giver,
-                    receiver,
-                    secretId: generateSecretId()
-                });
-            }
-        } else {
-            // Random Mode (Standard)
-            let receiverPool = [...participants];
-            currentPairs = [];
+        const result = GameLogic.performDrawLogic(participants, circleModeCheckbox.checked, restrictionsObj);
 
-            let isValid = false;
-            let attempts = 0;
-
-            while (!isValid && attempts < 100) {
-                attempts++;
-                shuffleArray(receiverPool);
-                isValid = true;
-                for (let i = 0; i < participants.length; i++) {
-                    if (participants[i] === receiverPool[i]) {
-                        isValid = false;
-                        break;
-                    }
-                }
-            }
-
-            if (!isValid) {
-                showToast("Não foi possível gerar um sorteio válido. Tente novamente.", "error");
-                return;
-            }
-
-            for (let i = 0; i < participants.length; i++) {
-                currentPairs.push({
-                    giver: participants[i],
-                    receiver: receiverPool[i],
-                    secretId: generateSecretId()
-                });
-            }
+        if (!result.success) {
+            showToast(result.error, "error");
+            return;
         }
+
+        currentPairs = result.pairs;
 
         renderResults();
         setupView.classList.remove('active');
@@ -585,27 +604,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Friendly URL Helpers ---
 
-    function generateSlug(text) {
-        return text
-            .toString()
-            .normalize('NFD') // Split accents
-            .replace(/[\u0300-\u036f]/g, '') // Remove accents
-            .toLowerCase()
-            .trim()
-            .replace(/\s+/g, '-') // Replace spaces with -
-            .replace(/[^\w\-]+/g, '') // Remove non-word chars
-            .replace(/\-\-+/g, '-'); // Replace multiple - with single -
-    }
-
-    function generateSecretId() {
-        // Generate a random 6-character string (alphanumeric)
-        return Math.random().toString(36).substring(2, 8);
-    }
-
     async function getUniqueSlug(baseName) {
         if (!supabase) return null;
 
-        let slug = generateSlug(baseName);
+        let slug = GameLogic.generateSlug(baseName);
         let isUnique = false;
         let counter = 1;
         let candidateSlug = slug;
@@ -630,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function generateMasterLink() {
         if (!urlDisplay) return;
 
-        const adminToken = generateSecretId(); // Reuse random string generator for admin token
+        const adminToken = GameLogic.generateSecretId(); // Reuse random string generator for admin token
 
         const masterData = {
             master: true,
@@ -698,7 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const url = generatedUrlSpan.textContent;
                 if (url && url !== '...') {
                     navigator.clipboard.writeText(url).then(() => {
-                        showToast("Copiado, não compartilhe esse link, pois ele revela todo o resultado do sorteio.", "warning", newCopyBtn);
+                        showToast("Copiado, não compartilhe esse link, pois ele revela todo o resultado do sorteio.", "warning", newCopyBtn, 4000);
                         newCopyBtn.classList.add('copied');
                         setTimeout(() => newCopyBtn.classList.remove('copied'), 600);
                     });
@@ -706,15 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Try to shorten the URL (optional)
-        try {
-            const shortUrl = await shortenUrl(fullUrl);
-            if (shortUrl) {
-                generatedUrlSpan.textContent = shortUrl;
-            }
-        } catch (error) {
-            console.error("Failed to shorten URL:", error);
-        }
+
     }
 
 
@@ -737,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 link = `${baseUrl}?id=${currentSlug}&u=${pair.secretId}`;
             } else if (currentSlug) {
                 // Fallback for old draws without secretId (shouldn't happen for new ones)
-                const userSlug = generateSlug(pair.giver);
+                const userSlug = GameLogic.generateSlug(pair.giver);
                 link = `${baseUrl}?id=${currentSlug}&u=${userSlug}`;
             } else {
                 // Legacy Link: ?data=base64
@@ -757,6 +751,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // Remove old listeners (cloning is a quick way)
             const newCopyBtn = copyBtn.cloneNode(true);
             const newWhatsappBtn = whatsappBtn.cloneNode(true);
+
+            // Add test hook
+            newCopyBtn.setAttribute('data-test-link', link);
+
             copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
             whatsappBtn.parentNode.replaceChild(newWhatsappBtn, whatsappBtn);
 
@@ -844,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.replaceState({}, '', url);
     }
 
-    function showToast(msg, type = 'success', targetEl = null) {
+    function showToast(msg, type = 'success', targetEl = null, duration = 2000) {
         // Clear any existing timeout to prevent overlapping toasts
         if (toastTimeout) {
             clearTimeout(toastTimeout);
@@ -856,6 +854,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (type === 'error') {
             toast.classList.add('error');
+        } else if (type === 'warning') {
+            toast.classList.add('warning'); // Add warning class support if needed, or just default style
+            // Ensure warning style is handled in CSS if 'warning' class is used, 
+            // otherwise it might just default. For now, let's assume 'success' or 'error' are main ones,
+            // but since we passed 'warning' in the previous step, we should handle it or map it.
+            // Let's just keep the class add logic simple.
         } else {
             toast.classList.add('success');
         }
@@ -878,14 +882,14 @@ document.addEventListener('DOMContentLoaded', () => {
             toast.style.top = 'auto';
         }
 
-        // Hide toast after 2 seconds with slide-out animation
+        // Hide toast after duration with slide-out animation
         toastTimeout = setTimeout(() => {
             toast.classList.add('hide');
             setTimeout(() => {
                 toast.classList.remove('show', 'hide');
                 toastTimeout = null;
             }, 300); // Match animation duration
-        }, 2000);
+        }, duration);
     }
 
     function confettiEffect() {

@@ -123,7 +123,8 @@
                 </div>
             </div>
 
-            <p class="admin-warning"><i class="fas fa-exclamation-triangle"></i> Não compartilhe esse link com ninguém
+            <p class="admin-warning"><i class="fas fa-exclamation-triangle"></i> Não compartilhe esse link com
+                ninguém
                 do grupo</p>
         </div>
 
@@ -165,12 +166,31 @@
         </section>
     </main>
 
+    <!-- Restrictions Modal -->
+    <div id="restrictions-modal" class="modal">
+        <div class="modal-content">
+            <header class="card-header">
+                <h2>Restrições de <span id="restriction-giver-name" class="highlight-text"></span></h2>
+                <p>Marque quem esta pessoa <strong>NÃO</strong> pode tirar.</p>
+            </header>
+            <div class="card-body">
+                <ul id="restrictions-list" class="participants-list">
+                    <!-- Checkboxes injected here -->
+                </ul>
+            </div>
+            <footer class="card-footer">
+                <button id="save-restrictions-btn" class="btn-primary">Salvar</button>
+            </footer>
+        </div>
+    </div>
+
     <!-- Verification Modal -->
     <div id="verify-modal" class="modal">
         <div class="modal-content">
             <header class="card-header">
                 <h2>Resultado do Sorteio</h2>
-                <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> Atenção: Isso revela todos os amigos
+                <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> Atenção: Isso revela todos
+                    os amigos
                     secretos!</p>
             </header>
             <div class="card-body">
@@ -178,8 +198,10 @@
                     <!-- List items injected here -->
                 </ul>
             </div>
-            <footer class="card-footer">
-                <button id="close-modal-btn" class="btn-primary">Fechar</button>
+            <footer class="card-footer" style="display: flex; gap: 10px;">
+                <button id="redraw-btn" class="btn-secondary" style="flex: 1;"><i class="fas fa-sync-alt"></i>
+                    Resorteio</button>
+                <button id="close-modal-btn" class="btn-primary" style="flex: 1;">Fechar</button>
             </footer>
         </div>
     </div>
@@ -189,7 +211,9 @@
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js?v=10"></script>
+    <script src="game-logic.js?v=10"></script>
     <script src="script.js?v=10"></script>
+
 </body>
 
 </html>
