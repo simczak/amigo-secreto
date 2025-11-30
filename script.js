@@ -208,8 +208,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else if (userParam) {
                     // Reveal View
+                    console.log('Checking Reveal View for userParam:', userParam);
+                    console.log('Current Pairs:', currentPairs);
+
                     // Check if userParam matches a secretId or a slug (legacy fallback)
-                    const pair = currentPairs.find(p => p.secretId === userParam || GameLogic.generateSlug(p.giver) === userParam);
+                    const pair = currentPairs.find(p => {
+                        const slug = GameLogic.generateSlug(p.giver);
+                        const matchSecret = p.secretId === userParam;
+                        const matchSlug = slug === userParam;
+                        console.log(`Checking pair: ${p.giver} (Secret: ${p.secretId}, Slug: ${slug}) -> MatchSecret: ${matchSecret}, MatchSlug: ${matchSlug}`);
+                        return matchSecret || matchSlug;
+                    });
 
                     if (pair) {
                         const revealData = {
@@ -221,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showRevealView(revealData);
                         showView('reveal-view');
                     } else {
+                        console.error('Pair not found for userParam:', userParam);
                         showToast("Participante não encontrado neste sorteio.");
                         showView('setup-view');
                     }
@@ -397,17 +407,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (error.code === 'PGRST204' && error.message.includes('Could not find the')) {
                         msg += " Coluna faltando no Supabase (slug ou draw_data).";
                     }
-                    // Don't show toast for duplicate key error (slug collision handled elsewhere, but just in case)
+                    // Don't show toast for duplicate key error (slug collision handled elsewhere)
                     if (error.code !== '23505') {
                         showToast(msg, "error");
                     }
+                    return { success: false, code: error.code, error: error };
                 } else {
                     console.log("Supabase save SUCCESS:", data);
+                    return { success: true, data: data };
                 }
             } catch (e) {
                 console.error("Supabase save EXCEPTION:", e);
+                return { success: false, error: e };
             }
         }
+        return { success: true }; // Local only is considered success for now
     }
 
 
@@ -604,30 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Friendly URL Helpers ---
 
-    async function getUniqueSlug(baseName) {
-        if (!supabase) return null;
 
-        let slug = GameLogic.generateSlug(baseName);
-        let isUnique = false;
-        let counter = 1;
-        let candidateSlug = slug;
-
-        while (!isUnique && counter < 20) { // Limit attempts to avoid infinite loop
-            const { data, error } = await supabase
-                .from('draws')
-                .select('slug')
-                .eq('slug', candidateSlug)
-                .maybeSingle();
-
-            if (!data) {
-                isUnique = true; // Slug not found, so it's unique
-            } else {
-                counter++;
-                candidateSlug = `${slug}-${counter}`;
-            }
-        }
-        return candidateSlug;
-    }
 
     async function generateMasterLink() {
         if (!urlDisplay) return;
@@ -655,26 +646,46 @@ document.addEventListener('DOMContentLoaded', () => {
         // Default to legacy encoding if Supabase is down
         let fullUrl = '';
         let slug = null;
+        let saveSuccess = false;
 
         if (supabase && participants.length > 0) {
-            // Generate Friendly Slug based on first participant
-            const firstName = participants[0];
-            slug = await getUniqueSlug(firstName);
+            // Retry logic for slug generation and saving
+            let attempts = 0;
+            while (!saveSuccess && attempts < 3) {
+                attempts++;
+                // Generate Friendly Slug based on first participant
+                const firstName = participants[0];
+                slug = await getUniqueSlug(firstName); // This now includes a DB check
+
+                if (slug) {
+                    currentSlug = slug;
+                    const baseUrl = window.location.href.split('?')[0];
+                    fullUrl = `${baseUrl}?id=${slug}&admin=${adminToken}`;
+
+                    // Save full data to Supabase
+                    const result = await saveToHistory(fullUrl, currentPairs.length, slug, masterData);
+                    if (result.success) {
+                        saveSuccess = true;
+                    } else {
+                        console.warn(`Failed to save with slug ${slug}, retrying...`, result.error);
+                        slug = null; // Reset slug to try again
+                    }
+                } else {
+                    break; // If getUniqueSlug fails to return anything, stop trying
+                }
+            }
         }
 
-        if (slug) {
-            // Use Friendly URL with Admin Token
-            currentSlug = slug;
-            const baseUrl = window.location.href.split('?')[0];
-            fullUrl = `${baseUrl}?id=${slug}&admin=${adminToken}`;
-
-            // Save full data to Supabase
-            await saveToHistory(fullUrl, currentPairs.length, slug, masterData);
+        if (saveSuccess && slug) {
+            // Success with Supabase
+            // fullUrl is already set
         } else {
-            // Fallback to Legacy URL
+            // Fallback to Legacy URL if Supabase failed or timed out
+            console.warn("Falling back to legacy URL generation");
             const encoded = encodeData(masterData);
             const baseUrl = window.location.href.split('?')[0];
             fullUrl = `${baseUrl}?data=${encoded}`;
+            currentSlug = null; // Ensure we don't use a broken slug
             await saveToHistory(fullUrl, currentPairs.length, null, null);
         }
 
@@ -744,7 +755,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const encodedData = encodeData(pairData);
                 link = `${baseUrl}?data=${encodedData}`;
             }
-
             const copyBtn = item.querySelector('.btn-copy');
             const whatsappBtn = item.querySelector('.btn-whatsapp');
 
@@ -919,6 +929,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             `;
             document.head.appendChild(style);
+        }
+    }
+
+    async function getUniqueSlug(baseName) {
+        let slug = GameLogic.generateSlug(baseName);
+        let unique = false;
+        let counter = 0;
+
+        while (!unique) {
+            const checkSlug = counter === 0 ? slug : `${slug}-${counter}`;
+
+            // Create a promise that rejects after 5 seconds
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout')), 5000)
+            );
+
+            try {
+                const { data, error } = await Promise.race([
+                    supabase
+                        .from('draws')
+                        .select('slug')
+                        .eq('slug', checkSlug)
+                        .maybeSingle(),
+                    timeout
+                ]);
+
+                if (error) {
+                    console.error("Error checking slug uniqueness", error);
+                    // Fallback to random if DB error
+                    return `${slug}-${GameLogic.generateSecretId()}`;
+                }
+
+                if (!data) {
+                    unique = true;
+                    return checkSlug;
+                }
+            } catch (e) {
+                console.error("Slug check timed out or failed", e);
+                // Fallback to random suffix on timeout
+                return `${slug}-${GameLogic.generateSecretId()}`;
+            }
+            counter++;
         }
     }
 
